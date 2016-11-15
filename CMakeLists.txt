@@ -34,7 +34,18 @@ ENDIF()
 SET_PROPERTY(TARGET xplm APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/sdk/CHeaders/XPLM" "${CMAKE_CURRENT_SOURCE_DIR}/sdk/CHeaders/Wrappers")
 SET_PROPERTY(TARGET xpwidgets APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/sdk/CHeaders/XPLM" "${CMAKE_CURRENT_SOURCE_DIR}/sdk/CHeaders/Widgets" "${CMAKE_CURRENT_SOURCE_DIR}/sdk/CHeaders/Wrappers")
 
-FILE(GENERATE OUTPUT "includes.txt" CONTENT "$<TARGET_PROPERTY:xplm,INTERFACE_INCLUDE_DIRECTORIES>\n")
+FUNCTION(add_xplane_sdk_definitions library_name) 
+    IF(APPLE)
+        TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=1 -DIBM=0 -DLIN=0)
+    ELSEIF(UNIX)
+        TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=0 -DIBM=0 -DLIN=1)
+    ELSEIF(WIN32)
+        TARGET_COMPILE_OPTIONS(${library_name} PRIVATE "/MD$<$<CONFIG:Debug>:d>")
+        TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=0 -DIBM=1 -DLIN=0)
+    ENDIF()
+
+    TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DXPLM200=1 -DXPLM210=1)
+ENDFUNCTION(add_xplane_sdk_definitions)
 
 # Set up an X-Plane plugin
 FUNCTION(add_xplane_plugin library_name ...)
@@ -44,21 +55,16 @@ FUNCTION(add_xplane_plugin library_name ...)
 
     IF(APPLE)
         ADD_EXECUTABLE(${library_name} ${FILES})
-        TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=1 -DIBM=0 -DLIN=0)
         SET_TARGET_PROPERTIES(${library_name} PROPERTIES OUTPUT_NAME "mac.xpl")
     ELSEIF(UNIX)
         ADD_LIBRARY(${library_name} SHARED ${FILES})
-        TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=0 -DIBM=0 -DLIN=1)
         SET_TARGET_PROPERTIES(${library_name} PROPERTIES OUTPUT_NAME "lin.xpl")
     ELSEIF(WIN32)
         ADD_LIBRARY(${library_name} MODULE ${FILES})
-        TARGET_COMPILE_OPTIONS(${library_name} PRIVATE "/MD$<$<CONFIG:Debug>:d>")
-        TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=0 -DIBM=1 -DLIN=0)
         TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -D_CRT_SECURE_NO_WARNINGS /bigobj)
         SET_TARGET_PROPERTIES(${library_name} PROPERTIES OUTPUT_NAME "win.xpl")
     ENDIF()
-
-    TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DXPLM200=1 -DXPLM210=1)
+    add_xplane_sdk_definitions(${library_name})
 
     #link flags
     IF(APPLE)
