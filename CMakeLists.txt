@@ -45,6 +45,7 @@ FUNCTION(add_xplane_sdk_definitions library_name)
     ENDIF()
 
     TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DXPLM200=1 -DXPLM210=1)
+    TARGET_INCLUDE_DIRECTORIES(${library_name} PUBLIC "${XPLANE_INCLUDES_PATH}/XPLM" "${XPLANE_INCLUDES_PATH}/Widgets" "${XPLANE_INCLUDES_PATH}/Wrappers")
 ENDFUNCTION(add_xplane_sdk_definitions)
 
 # Set up an X-Plane plugin
