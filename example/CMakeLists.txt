@@ -6,5 +6,5 @@ cmake_minimum_required(VERSION 2.8)
 add_subdirectory(../ bin/)
 
 # Set up the plugin
-add_xplane_plugin(example_plugin example_plugin.cpp)
+add_xplane_plugin(example_plugin 3 example_plugin.cpp)
 
