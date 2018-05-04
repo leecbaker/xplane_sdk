@@ -153,8 +153,8 @@ typedef int XPLMPluginID;
 /* X-Plane itself                                                              */
 #define XPLM_PLUGIN_XPLANE   (0)
 
-/* The current XPLM revision is 2.10 (210).                                    */
-#define kXPLM_Version        (210)
+/* The current XPLM revision is 3.01 (301).                                    */
+#define kXPLM_Version        (301)
 
 /*
  * XPLMKeyFlags

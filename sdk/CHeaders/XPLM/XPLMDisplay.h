@@ -12,13 +12,13 @@
 
 /*
  * This API provides the basic hooks to draw in X-Plane and create user 
- * interface. All X-Plane drawing is done in OpenGL.  The X-Plane plug-in 
+ * interface. All X-Plane drawing is done in OpenGL. The X-Plane plug-in 
  * manager takes care of properly setting up the OpenGL context and matrices.  
  * You do not decide when in your code's  execution to draw; X-Plane tells you 
- * when it is ready to have your plugin draw. 
+ * (via callbacks) when it is ready to have your plugin draw. 
  * 
  * X-Plane's drawing strategy is straightforward: every "frame" the screen is 
- * rendered by drawing the 3-d scene (dome, ground, objects, airplanes, etc.)  
+ * rendered by drawing the 3-D scene (dome, ground, objects, airplanes, etc.) 
  * and then drawing the cockpit on top of it.  Alpha blending is used to 
  * overlay the cockpit over the world (and the gauges over the panel, etc.). 
  * X-Plane user interface elements (including windows like the map, the main 
@@ -26,11 +26,11 @@
  * 
  * There are two ways you can draw: directly and in a window. 
  * 
- * Direct drawing involves drawing to the screen before or after X-Plane 
- * finishes a phase of drawing.  When you draw directly, you can specify 
- * whether X-Plane is to complete this phase or not.  This allows you to do 
- * three things: draw before X-Plane does (under it), draw after X-Plane does 
- * (over it), or draw instead of X-Plane. 
+ * Direct drawing (deprecated!---more on that below) involves drawing to the 
+ * screen before or after X-Plane finishes a phase of drawing.  When you draw 
+ * directly, you can specify whether X-Plane is to complete this phase or not. 
+ * This allows you to do three things: draw before X-Plane does (under it), 
+ * draw after X-Plane does (over it), or draw instead of X-Plane. 
  * 
  * To draw directly, you register a callback and specify which phase you want 
  * to intercept.  The plug-in manager will call you over and over to draw that 
@@ -40,32 +40,45 @@
  * that  you cannot assume that you are the only plug-in drawing at this 
  * phase. 
  * 
- * Window drawing provides slightly higher level functionality.  With window 
- * drawing you create a window that takes up a portion of the screen.  Window 
- * drawing is always two dimensional.  Window drawing is front-to-back 
- * controlled; you can  specify that you want your window to be brought on 
- * top, and other plug-ins may put their window on top of you.  Window drawing 
- * also allows you to sign up for key presses and receive mouse clicks. 
+ * Direct drawing is deprecated; at some point in the X-Plane 11 run, it will 
+ * likely become unsupported entirely as X-Plane transitions from OpenGL to 
+ * modern graphics API backends (e.g., Vulkan, Metal, etc.). In the long term, 
+ * plugins should use the XPLMInstance API for drawing 3-D objects---this will 
+ * be much more efficient than general 3-D OpenGL drawing, and it will 
+ * actually be supported by the new graphics backends. We do not yet know what 
+ * the post-transition API for generic 3-D drawing will look like (if it 
+ * exists at all). 
+ * 
+ * In contrast to direct drawing, window drawing provides a higher level 
+ * functionality. With window drawing, you create a 2-D window that takes up a 
+ * portion of the screen. Window drawing is always two dimensional.  Window 
+ * drawing is front-to-back controlled; you can specify that you want your 
+ * window to be brought on top, and other plug-ins may put their window on top 
+ * of you.  Window drawing also allows you to sign up for key presses and 
+ * receive mouse clicks. 
  * 
  * There are three ways to get keystrokes: 
  * 
- * If you create a window, the window can take keyboard focus.  It will then 
- * receive all keystrokes.  If no window has focus, X-Plane receives 
+ * 1. If you create a window, the window can take keyboard focus.  It will 
+ * then receive all keystrokes.  If no window has focus, X-Plane receives 
  * keystrokes.  Use this to implement typing in dialog boxes, etc.  Only one 
  * window may have focus at a time; your window will be notified if it loses 
  * focus. 
  * 
- * If you need to associate key strokes with commands/functions in your 
- * plug-in, use a hot key.  A hoy is a key-specific callback.  Hotkeys are 
- * sent based on virtual key strokes, so any key may be distinctly mapped with 
- * any modifiers.  Hot keys  can be remapped by other plug-ins.  As a plug-in, 
- * you don't have to worry about  what your hot key ends up mapped to; other 
- * plug-ins may provide a UI for remapping keystrokes.  So hotkeys allow a 
- * user to resolve conflicts and customize keystrokes. 
- * 
- * If you need low level access to the keystroke stream, install a key 
+ * 2. If you need low level access to the keystroke stream, install a key 
  * sniffer.  Key sniffers can be installed above everything or right in front 
- * of the sim.                                                                 
+ * of the sim. 
+ * 
+ * 3. If you would like to associate key strokes with commands/functions in 
+ * your plug-in, you should simply register a command (via 
+ * XPLMCreateCommand()) and allow users to bind whatever key they choose to 
+ * that command. Another (now deprecated) method of doing so is to use a hot 
+ * key---a key-specific callback.  Hotkeys are sent based on virtual key 
+ * strokes, so any key may be distinctly mapped with any modifiers.  Hot keys  
+ * can be remapped by other plug-ins.  As a plug-in, you don't have to worry 
+ * about  what your hot key ends up mapped to; other plug-ins may provide a UI 
+ * for remapping keystrokes.  So hotkeys allow a user to resolve conflicts and 
+ * customize keystrokes.                                                       
  *
  */
 
@@ -79,13 +92,18 @@ extern "C" {
  * DRAWING CALLBACKS
  ***************************************************************************/
 /*
- * Basic drawing callbacks, for low level intercepting of render loop. The 
- * purpose of drawing callbacks is to provide targeted additions or  
+ * Basic drawing callbacks, for low level intercepting of X-Plane's render 
+ * loop. The purpose of drawing callbacks is to provide targeted additions or  
  * replacements to X-Plane's graphics environment (for example, to add extra 
  * custom objects, or replace drawing of the AI aircraft).  Do not assume that 
  * the drawing callbacks will be called in the order implied by the 
  * enumerations. Also do not assume that each drawing phase ends before 
- * another begins; they may be nested.                                         
+ * another begins; they may be nested. 
+ * 
+ * Note that all APIs in this section are deprecated, and will likely be 
+ * removed during the X-Plane 11 run as part of the transition to 
+ * Vulkan/Metal/etc. See the XPLMInstance API for future-proof drawing of 3-D 
+ * objects.                                                                    
  *
  */
 
@@ -143,17 +161,17 @@ enum {
     ,xplm_Phase_LastCockpit                   = 55
 
 #if defined(XPLM200)
-     /* Deprecated as of XPLM300; Use the full-blown map API instead.               */
+     /* Removed as of XPLM300; Use the full-blown XPLMMap API instead.              */
     ,xplm_Phase_LocalMap3D                    = 100
 
 #endif /* XPLM200 */
 #if defined(XPLM200)
-     /* Deprecated as of XPLM300; Use the full-blown map API instead.               */
+     /* Removed as of XPLM300; Use the full-blown XPLMMap API instead.              */
     ,xplm_Phase_LocalMap2D                    = 101
 
 #endif /* XPLM200 */
 #if defined(XPLM200)
-     /* Deprecated as of XPLM300; Use the full-blown map API instead.               */
+     /* Removed as of XPLM300; Use the full-blown XPLMMap API instead.              */
     ,xplm_Phase_LocalMapProfile               = 102
 
 #endif /* XPLM200 */
@@ -183,34 +201,6 @@ typedef int (* XPLMDrawCallback_f)(
                                    void *               inRefcon);    
 
 /*
- * XPLMKeySniffer_f
- * 
- * This is the prototype for a low level key-sniffing function.  Window-based 
- * UI _should not use this_!  The windowing system provides high-level 
- * mediated keyboard access.  By comparison, the key sniffer provides low 
- * level keyboard access. 
- * 
- * Key sniffers are provided to allow libraries to provide non-windowed user  
- * interaction.  For example, the MUI library uses a key sniffer to do pop-up 
- * text entry. 
- * 
- * inKey is the character pressed, inRefCon is a value you supply during 
- * registration. Return 1 to pass the key on to the next sniffer, the window 
- * mgr, X-Plane, or whomever is down stream.  Return 0 to consume the key. 
- * 
- * Warning: this API declares virtual keys as a signed character; however the 
- * VKEY #define macros in XPLMDefs.h define the vkeys using unsigned values 
- * (that is 0x80 instead of -0x80).  So you may need to cast the incoming vkey 
- * to an unsigned char to get correct comparisons in C.                        
- *
- */
-typedef int (* XPLMKeySniffer_f)(
-                                   char                 inChar,    
-                                   XPLMKeyFlags         inFlags,    
-                                   char                 inVirtualKey,    
-                                   void *               inRefcon);    
-
-/*
  * XPLMRegisterDrawCallback
  * 
  * This routine registers a low level drawing callback.  Pass in the phase you 
@@ -218,7 +208,11 @@ typedef int (* XPLMKeySniffer_f)(
  * This routine returns 1 if the registration was successful, or 0 if the 
  * phase does not exist in this version of X-Plane.  You may register a 
  * callback multiple times for the same or different phases as long as the 
- * refcon is unique each time.                                                 
+ * refcon is unique each time. 
+ * 
+ * Note that this function will likely be removed during the X-Plane 11 run as 
+ * part of the transition to Vulkan/Metal/etc. See the XPLMInstance API for 
+ * future-proof drawing of 3-D objects.                                        
  *
  */
 XPLM_API int                  XPLMRegisterDrawCallback(
@@ -233,43 +227,17 @@ XPLM_API int                  XPLMRegisterDrawCallback(
  * This routine unregisters a draw callback.  You must unregister a callback 
  * for each  time you register a callback if you have registered it multiple 
  * times with different refcons.  The routine returns 1 if it can find the 
- * callback to unregister, 0 otherwise.                                        
+ * callback to unregister, 0 otherwise. 
+ * 
+ * Note that this function will likely be removed during the X-Plane 11 run as 
+ * part of the transition to Vulkan/Metal/etc. See the XPLMInstance API for 
+ * future-proof drawing of 3-D objects.                                        
  *
  */
 XPLM_API int                  XPLMUnregisterDrawCallback(
                                    XPLMDrawCallback_f   inCallback,    
                                    XPLMDrawingPhase     inPhase,    
                                    int                  inWantsBefore,    
-                                   void *               inRefcon);    
-
-/*
- * XPLMRegisterKeySniffer
- * 
- * This routine registers a key sniffing callback.  You specify whether you 
- * want to sniff before the window system, or only sniff keys the window 
- * system does not consume.  You should ALMOST ALWAYS sniff non-control keys 
- * after the window system.  When the window system consumes a key, it is 
- * because the user has "focused" a window.  Consuming the key or taking 
- * action based on the key will produce very weird results.  Returns 1 if 
- * successful.                                                                 
- *
- */
-XPLM_API int                  XPLMRegisterKeySniffer(
-                                   XPLMKeySniffer_f     inCallback,    
-                                   int                  inBeforeWindows,    
-                                   void *               inRefcon);    
-
-/*
- * XPLMUnregisterKeySniffer
- * 
- * This routine unregisters a key sniffer.  You must unregister a key sniffer 
- * for every time you register one with the exact same signature.  Returns 1 
- * if successful.                                                              
- *
- */
-XPLM_API int                  XPLMUnregisterKeySniffer(
-                                   XPLMKeySniffer_f     inCallback,    
-                                   int                  inBeforeWindows,    
                                    void *               inRefcon);    
 
 /***************************************************************************
@@ -283,7 +251,7 @@ XPLM_API int                  XPLMUnregisterKeySniffer(
  * against old versions of the XPLM, as well as windows created via the 
  * deprecated XPLMCreateWindow() function, rather than XPLMCreateWindowEx()), 
  * or modern (for windows compiled against the XPLM300 or newer API, and 
- * created via XPLMCreateWindowEX()). 
+ * created via XPLMCreateWindowEx()). 
  * 
  * Modern windows have access to new X-Plane 11 windowing features, like 
  * support for new positioning modes (including being "popped out" into their 
@@ -303,13 +271,65 @@ XPLM_API int                  XPLMUnregisterKeySniffer(
  * look quite small when X-Plane is operating in a scaled mode. 
  * 
  * Legacy windows have their origin in the lower left of the main X-Plane 
- * window, while modern windows have their origin in the lower left of the 
- * entire global desktop space (since they are not constrained to the main 
- * window). In both cases, x increases as you move left, and y increases as 
- * you move up.                                                                
+ * window. In contrast, since modern windows are not constrained to the main 
+ * window, they have their origin in the lower left of the entire global 
+ * desktop space, and the lower left of the main X-Plane window is not 
+ * guaranteed to be (0, 0). In both cases, x increases as you move left, and y 
+ * increases as you move up.                                                   
  *
  */
 
+
+/*
+ * XPLMWindowID
+ * 
+ * This is an opaque identifier for a window.  You use it to control your 
+ * window. When you create a window (via either XPLMCreateWindow() or 
+ * XPLMCreateWindowEx()), you will specify callbacks to handle drawing, mouse 
+ * interaction, etc.                                                           
+ *
+ */
+typedef void * XPLMWindowID;
+
+/*
+ * XPLMDrawWindow_f
+ * 
+ * A callback to handle 2-D drawing of your window.  You are passed in your 
+ * window and its refcon. Draw the window.  You can use other XPLM functions 
+ * from this header to find the current dimensions of your window, etc.  When 
+ * this callback is called, the OpenGL context will be set properly for 2-D 
+ * window drawing. 
+ * 
+ * NOTE: Because you are drawing your window over a background, you can make a 
+ * translucent window easily by simply not filling in your entire window's 
+ * bounds.                                                                     
+ *
+ */
+typedef void (* XPLMDrawWindow_f)(
+                                   XPLMWindowID         inWindowID,    
+                                   void *               inRefcon);    
+
+/*
+ * XPLMHandleKey_f
+ * 
+ * This function is called when a key is pressed or keyboard focus is taken 
+ * away from your window.  If losingFocus is 1, you are losing the keyboard 
+ * focus, otherwise a key was pressed and inKey contains its character.  You 
+ * are also passed your window and a refcon. 
+ * 
+ * Warning: this API declares virtual keys as a signed character; however the 
+ * VKEY #define macros in XPLMDefs.h define the vkeys using unsigned values 
+ * (that is 0x80 instead of -0x80).  So you may need to cast the incoming vkey 
+ * to an unsigned char to get correct comparisons in C.                        
+ *
+ */
+typedef void (* XPLMHandleKey_f)(
+                                   XPLMWindowID         inWindowID,    
+                                   char                 inKey,    
+                                   XPLMKeyFlags         inFlags,    
+                                   char                 inVirtualKey,    
+                                   void *               inRefcon,    
+                                   int                  losingFocus);    
 
 /*
  * XPLMMouseStatus
@@ -318,7 +338,8 @@ XPLM_API int                  XPLMUnregisterKeySniffer(
  * It is first called with the mouse down message.  It is then called zero or 
  * more times with the mouse-drag message, and finally it is called once with 
  * the mouse up message.  All of these messages will be directed to the same 
- * window.                                                                     
+ * window; you are guaranteed to not receive a drag or mouse-up event without 
+ * first receiving the corresponding mouse-down.                               
  *
  */
 enum {
@@ -331,6 +352,37 @@ enum {
 
 };
 typedef int XPLMMouseStatus;
+
+/*
+ * XPLMHandleMouseClick_f
+ * 
+ * You receive this call for one of three events: 
+ * 
+ * - when the user clicks the mouse button down - (optionally) when the user 
+ * drags the mouse after a down-click, but before the up-click - when the user 
+ * releases the down-clicked mouse button. 
+ * 
+ * You receive the x and y of the click, your window, and a refcon.  Return 1 
+ * to consume the click, or 0 to pass it through. 
+ * 
+ * WARNING: passing clicks through windows (as of this writing) causes mouse 
+ * tracking problems in X-Plane; do not use this feature! 
+ * 
+ * The units for x and y values match the units used in your window. Thus, for 
+ * "modern" windows (those created via XPLMCreateWindowEx() and compiled 
+ * against the XPLM300 library), the units are boxels, while legacy windows 
+ * will get pixels. Legacy windows have their origin in the lower left of the 
+ * main X-Plane window, while modern windows have their origin in the lower 
+ * left of the global desktop space. In both cases, x increases as you move 
+ * left, and y increases as you move up.                                       
+ *
+ */
+typedef int (* XPLMHandleMouseClick_f)(
+                                   XPLMWindowID         inWindowID,    
+                                   int                  x,    
+                                   int                  y,    
+                                   XPLMMouseStatus      inMouse,    
+                                   void *               inRefcon);    
 
 #if defined(XPLM200)
 /*
@@ -358,117 +410,6 @@ enum {
 typedef int XPLMCursorStatus;
 #endif /* XPLM200 */
 
-/*
- * XPLMWindowID
- * 
- * This is an opaque identifier for a window.  You use it to control your 
- * window. When you create a window, you will specify callbacks to handle 
- * drawing and mouse interaction, etc.                                         
- *
- */
-typedef void * XPLMWindowID;
-
-/*
- * XPLMDrawWindow_f
- * 
- * This function handles drawing.  You are passed in your window and its 
- * refcon. Draw the window.  You can use XPLM functions to find the current 
- * dimensions of your window, etc.  When this callback is called, the OpenGL 
- * context will be set properly for cockpit drawing. NOTE: Because you are 
- * drawing your window over a background, you can make a translucent window 
- * easily by simply not filling in your entire window's bounds.                
- *
- */
-typedef void (* XPLMDrawWindow_f)(
-                                   XPLMWindowID         inWindowID,    
-                                   void *               inRefcon);    
-
-#if defined(XPLM300)
-/*
- * XPLMReceiveMonitorBoundsGlobal_f
- * 
- * This function is informed of the global bounds (in boxels) of a particular 
- * monitor within the X-Plane global desktop space. Note that X-Plane must be 
- * running in full screen on a monitor in order for it to be passed to you in 
- * this callback.                                                              
- *
- */
-typedef void (* XPLMReceiveMonitorBoundsGlobal_f)(
-                                   int                  inMonitorIndex,    
-                                   int                  inLeftBx,    
-                                   int                  inTopBx,    
-                                   int                  inRightBx,    
-                                   int                  inBottomBx,    
-                                   void *               refcon);    
-#endif /* XPLM300 */
-
-#if defined(XPLM300)
-/*
- * XPLMReceiveMonitorBoundsOS_f
- * 
- * This function is informed of the global bounds (in pixels) of a particular 
- * monitor within the operating system's global desktop space. Note that a 
- * monitor index being passed to you here does not indicate that X-Plane is 
- * running in full screen on this monitor.                                     
- *
- */
-typedef void (* XPLMReceiveMonitorBoundsOS_f)(
-                                   int                  inMonitorIndex,    
-                                   int                  inLeftPx,    
-                                   int                  inTopPx,    
-                                   int                  inRightPx,    
-                                   int                  inBottomPx,    
-                                   void *               refcon);    
-#endif /* XPLM300 */
-
-/*
- * XPLMHandleKey_f
- * 
- * This function is called when a key is pressed or keyboard focus is taken 
- * away from your window.  If losingFocus is 1, you are losing the keyboard 
- * focus, otherwise a key was pressed and inKey contains its character.  You 
- * are also passewd your window and a  refcon. Warning: this API declares 
- * virtual keys as a signed character; however the VKEY #define macros in 
- * XPLMDefs.h define the vkeys using unsigned values (that is 0x80 instead of 
- * -0x80).  So you may need to cast the incoming vkey to an unsigned char to 
- * get correct comparisons in C.                                               
- *
- */
-typedef void (* XPLMHandleKey_f)(
-                                   XPLMWindowID         inWindowID,    
-                                   char                 inKey,    
-                                   XPLMKeyFlags         inFlags,    
-                                   char                 inVirtualKey,    
-                                   void *               inRefcon,    
-                                   int                  losingFocus);    
-
-/*
- * XPLMHandleMouseClick_f
- * 
- * You receive this call when the mouse button is pressed down or released.  
- * Between then these two calls is a drag.  You receive the x and y of the 
- * click, your window,  and a refcon.  Return 1 to consume the click, or 0 to 
- * pass it through. 
- * 
- * WARNING: passing clicks through windows (as of this writing) causes mouse 
- * tracking problems in X-Plane; do not use this feature! 
- * 
- * The units for x and y values match the units used in your window. Thus, for 
- * "modern" windows (those created via XPLMCreateWindowEx() and compiled 
- * against the XPLM300 library), the units are boxels, while legacy windows 
- * will get pixels. Legacy windows have their origin in the lower left of the 
- * main X-Plane window, while modern windows have their origin in the lower 
- * left of the global desktop space. In both cases, x increases as you move 
- * left, and y increases as you move up.                                       
- *
- */
-typedef int (* XPLMHandleMouseClick_f)(
-                                   XPLMWindowID         inWindowID,    
-                                   int                  x,    
-                                   int                  y,    
-                                   XPLMMouseStatus      inMouse,    
-                                   void *               inRefcon);    
-
 #if defined(XPLM200)
 /*
  * XPLMHandleCursor_f
@@ -478,18 +419,18 @@ typedef int (* XPLMHandleMouseClick_f)(
  * X-Plane to manage the cursor.  If you return xplm_CursorDefault, the SDK 
  * will try lower-Z-order plugin windows, then let the sim manage the cursor. 
  * 
- * Note: you should never show or hide the cursor yourself - these APIs are 
- * typically reference-counted and thus  cannot safely and predictably be used 
+ * Note: you should never show or hide the cursor yourself---these APIs are 
+ * typically reference-counted and thus cannot safely and predictably be used 
  * by the SDK.  Instead return one of xplm_CursorHidden to hide the cursor or 
  * xplm_CursorArrow/xplm_CursorCustom to show the cursor. 
  * 
  * If you want to implement a custom cursor by drawing a cursor in OpenGL, use 
  * xplm_CursorHidden to hide the OS cursor and draw the cursor using a 2-d 
- * drawing callback (after xplm_Phase_Window is probably a good choice).  If 
- * you want to use a custom OS-based cursor, use xplm_CursorCustom to ask 
- * X-Plane to show the cursor but not affect its image.  You can then use an 
- * OS specific call like SetThemeCursor (Mac) or SetCursor/LoadCursor 
- * (Windows). 
+ * drawing callback (after xplm_Phase_Window is probably a good choice, but 
+ * see deprecation warnings on the drawing APIs!).  If you want to use a 
+ * custom OS-based cursor, use xplm_CursorCustom to ask X-Plane to show the 
+ * cursor but not affect its image.  You can then use an OS specific call like 
+ * SetThemeCursor (Mac) or SetCursor/LoadCursor (Windows). 
  * 
  * The units for x and y values match the units used in your window. Thus, for 
  * "modern" windows (those created via XPLMCreateWindowEx() and compiled 
@@ -512,12 +453,12 @@ typedef XPLMCursorStatus (* XPLMHandleCursor_f)(
  * XPLMHandleMouseWheel_f
  * 
  * The SDK calls your mouse wheel callback when one of the mouse wheels is 
- * turned within your window.  Return 1 to consume the  mouse wheel clicks or 
- * 0 to pass them on to a lower window.  (You should consume mouse wheel 
- * clicks even if they do nothing if your window appears opaque to the user.)  
- * The number of clicks indicates how far the wheel was turned since the last 
- * callback. The wheel is 0 for the vertical axis or 1 for the horizontal axis 
- * (for OS/mouse combinations that support this). 
+ * scrolled within your window.  Return 1 to consume the mouse wheel movement 
+ * or 0 to pass them on to a lower window.  (If your window appears opaque to 
+ * the user, you should consume mouse wheel scrolling even if it does 
+ * nothing.)  The number of "clicks" indicates how far the wheel was turned 
+ * since the last callback. The wheel is 0 for the vertical axis or 1 for the 
+ * horizontal axis (for OS/mouse combinations that support this). 
  * 
  * The units for x and y values match the units used in your window. Thus, for 
  * "modern" windows (those created via XPLMCreateWindowEx() and compiled 
@@ -553,7 +494,7 @@ typedef int (* XPLMHandleMouseWheel_f)(
  * layering only applies to windows created with new X-Plane 11 GUI features. 
  * (Windows created using the older XPLMCreateWindow(), or windows compiled 
  * against a pre-XPLM300 version of the SDK will simply be placed in the 
- * floating window layer.)                                                     
+ * flight overlay window layer.)                                               
  *
  */
 enum {
@@ -577,6 +518,44 @@ enum {
 typedef int XPLMWindowLayer;
 #endif /* XPLM300 */
 
+#if defined(XPLM301)
+/*
+ * XPLMWindowDecoration
+ * 
+ * XPLMWindowDecoration describes how "modern" windows will be displayed. This 
+ * impacts both how X-Plane draws your window as well as certain mouse 
+ * handlers. 
+ * 
+ * Your window's decoration can only be specified when you create the window 
+ * (in the XPLMCreateWindow_t you pass to XPLMCreateWindowEx()).               
+ *
+ */
+enum {
+     /* X-Plane will draw no decoration for your window, and apply no automatic     *
+      * click handlers. The window will not stop click from passing through its     *
+      * bounds. This is suitable for "windows" which request, say, the full screen  *
+      * bounds, then only draw in a small portion of the available area.            */
+     xplm_WindowDecorationNone                = 0
+
+     /* The default decoration for "native" windows, like the map. Provides a solid *
+      * background, as well as click handlers for resizing and dragging the window. */
+    ,xplm_WindowDecorationRoundRectangle      = 1
+
+     /* X-Plane will draw no decoration for your window, nor will it provide resize *
+      * handlers for your window edges, but it will stop clicks from passing        *
+      * through your windows bounds.                                                */
+    ,xplm_WindowDecorationSelfDecorated       = 2
+
+     /* Like self-decorated, but with resizing; X-Plane will draw no decoration for *
+      * your window, but it will stop clicks from passing through your windows      *
+      * bounds, and provide automatic mouse handlers for resizing.                  */
+    ,xplm_WindowDecorationSelfDecoratedResizable = 3
+
+
+};
+typedef int XPLMWindowDecoration;
+#endif /* XPLM301 */
+
 #if defined(XPLM200)
 /*
  * XPLMCreateWindow_t
@@ -599,7 +578,7 @@ typedef int XPLMWindowLayer;
  * Note that this requires dealing with your window's bounds in "global 
  * desktop" positioning units, rather than the traditional panel coordinate 
  * system. In global desktop coordinates, the main X-Plane window may not have 
- * its origin at coordinate (0,0), and your own window may have negative 
+ * its origin at coordinate (0, 0), and your own window may have negative 
  * coordinates. Assuming you don't implicitly assume (0, 0) as your origin, 
  * the only API change you should need is to start using 
  * XPLMGetMouseLocationGlobal() rather than XPLMGetMouseLocation(), and 
@@ -630,12 +609,14 @@ typedef struct {
      XPLMHandleKey_f           handleKeyFunc;
      XPLMHandleCursor_f        handleCursorFunc;
      XPLMHandleMouseWheel_f    handleMouseWheelFunc;
+     /* A reference which will be passed into each of your window callbacks. Use    *
+      * this to pass information to yourself as needed.                             */
      void *                    refcon;
-#if defined(XPLM300)
-     /* True if you want to have an X-Plane 11-style "wrapper" around your window   *
-      * (like the X-Plane 11 map)                                                   */
-     int                       decorateAsFloatingWindow;
-#endif /* XPLM300 */
+#if defined(XPLM301)
+     /* Specifies the type of X-Plane 11-style "wrapper" you want around your       *
+      * window, if any                                                              */
+     XPLMWindowDecoration      decorateAsFloatingWindow;
+#endif /* XPLM301 */
 #if defined(XPLM300)
      XPLMWindowLayer           layer;
 #endif /* XPLM300 */
@@ -656,9 +637,7 @@ typedef struct {
  * the structSize of the structure to the size of the actual structure you 
  * used.  Also, you must provide functions for every callback---you may not 
  * leave them null!  (If you do not support the cursor or mouse wheel, use 
- * functions that return the default values.)  The numeric values of the 
- * XPMCreateWindow_t structure correspond to the parameters of 
- * XPLMCreateWindow.                                                           
+ * functions that return the default values.)                                  
  *
  */
 XPLM_API XPLMWindowID         XPLMCreateWindowEx(
@@ -712,12 +691,9 @@ XPLM_API void                 XPLMDestroyWindow(
 /*
  * XPLMGetScreenSize
  * 
- * This routine returns the size of the X-Plane OpenGL window in pixels.  
- * Please note that this is not the size of the screen when  doing 2-d drawing 
- * (the 2-d screen is currently always 1024x768, and  graphics are scaled up 
- * by OpenGL when doing 2-d drawing for higher-res monitors).  This number can 
- * be used to get a rough idea of the amount of detail the user will be able 
- * to see when drawing in 3-d.                                                 
+ * This routine returns the size of the main X-Plane OpenGL window in pixels.  
+ * This number can be used to get a rough idea of the amount of detail the 
+ * user will be able to see when drawing in 3-d.                               
  *
  */
 XPLM_API void                 XPLMGetScreenSize(
@@ -740,10 +716,10 @@ XPLM_API void                 XPLMGetScreenSize(
  * 0). Suppose the user has two displays side-by-side, both running at 1080p. 
  * Suppose further that they've configured their OS to make the left display 
  * their "primary" monitor, and that X-Plane is running in full-screen on 
- * their right monitor. In this case, the global desktop bounds would be the 
- * rectangle from (1920, 0) to (3840, 1080). If the user later asked X-Plane 
- * to draw on their primary monitor as well, the bounds would change to (0, 0) 
- * to (3840, 1080). 
+ * their right monitor only. In this case, the global desktop bounds would be 
+ * the rectangle from (1920, 0) to (3840, 1080). If the user later asked 
+ * X-Plane to draw on their primary monitor as well, the bounds would change 
+ * to (0, 0) to (3840, 1080). 
  * 
  * Finally, if the usable area of the virtual desktop is not a perfect 
  * rectangle (for instance, because the monitors have different resolutions or 
@@ -767,28 +743,71 @@ XPLM_API void                 XPLMGetScreenBoundsGlobal(
 
 #if defined(XPLM300)
 /*
+ * XPLMReceiveMonitorBoundsGlobal_f
+ * 
+ * This function is informed of the global bounds (in boxels) of a particular 
+ * monitor within the X-Plane global desktop space. Note that X-Plane must be 
+ * running in full screen on a monitor in order for that monitor to be passed 
+ * to you in this callback.                                                    
+ *
+ */
+typedef void (* XPLMReceiveMonitorBoundsGlobal_f)(
+                                   int                  inMonitorIndex,    
+                                   int                  inLeftBx,    
+                                   int                  inTopBx,    
+                                   int                  inRightBx,    
+                                   int                  inBottomBx,    
+                                   void *               inRefcon);    
+#endif /* XPLM300 */
+
+#if defined(XPLM300)
+/*
  * XPLMGetAllMonitorBoundsGlobal
  * 
  * This routine immediately calls you back with the bounds (in boxels) of each 
- * full-screen X-Plane window within the X-Plane global desktop space. (Note 
+ * full-screen X-Plane window within the X-Plane global desktop space. Note 
  * that if a monitor is *not* covered by an X-Plane window, you cannot get its 
- * bounds this way. Likewise, monitors with only an X-Plane window will not be 
- * included.) 
+ * bounds this way. Likewise, monitors with only an X-Plane window (not in 
+ * full-screen mode) will not be included. 
  * 
- * If X-Plane is running in full-screen, then the combined global bounds of 
+ * If X-Plane is running in full-screen and your monitors are of the same size 
+ * and configured contiguously in the OS, then the combined global bounds of 
  * all full-screen monitors will match the total global desktop bounds, as 
  * returned by XPLMGetScreenBoundsGlobal(). (Of course, if X-Plane is running 
- * in windowed mode, this will not be the case.) 
+ * in windowed mode, this will not be the case. Likewise, if you have 
+ * differently sized monitors, the global desktop space will include wasted 
+ * space.) 
  * 
  * Note that this function's monitor indices match those provided by 
  * XPLMGetAllMonitorBoundsOS(), but the coordinates are different (since the 
  * X-Plane global desktop may not match the operating system's global desktop, 
- * and one X-Plane boxel may be larger than one pixel).                        
+ * and one X-Plane boxel may be larger than one pixel due to 150% or 200% 
+ * scaling).                                                                   
  *
  */
 XPLM_API void                 XPLMGetAllMonitorBoundsGlobal(
                                    XPLMReceiveMonitorBoundsGlobal_f inMonitorBoundsCallback,    
-                                   void *               refcon);    
+                                   void *               inRefcon);    
+#endif /* XPLM300 */
+
+#if defined(XPLM300)
+/*
+ * XPLMReceiveMonitorBoundsOS_f
+ * 
+ * This function is informed of the global bounds (in pixels) of a particular 
+ * monitor within the operating system's global desktop space. Note that a 
+ * monitor index being passed to you here does not indicate that X-Plane is 
+ * running in full screen on this monitor, or even that any X-Plane windows 
+ * exist on this monitor.                                                      
+ *
+ */
+typedef void (* XPLMReceiveMonitorBoundsOS_f)(
+                                   int                  inMonitorIndex,    
+                                   int                  inLeftPx,    
+                                   int                  inTopPx,    
+                                   int                  inRightPx,    
+                                   int                  inBottomPx,    
+                                   void *               inRefcon);    
 #endif /* XPLM300 */
 
 #if defined(XPLM300)
@@ -808,7 +827,7 @@ XPLM_API void                 XPLMGetAllMonitorBoundsGlobal(
  */
 XPLM_API void                 XPLMGetAllMonitorBoundsOS(
                                    XPLMReceiveMonitorBoundsOS_f inMonitorBoundsCallback,    
-                                   void *               refcon);    
+                                   void *               inRefcon);    
 #endif /* XPLM300 */
 
 /*
@@ -817,9 +836,9 @@ XPLM_API void                 XPLMGetAllMonitorBoundsOS(
  * Deprecated in XPLM300. Modern windows should use 
  * XPLMGetMouseLocationGlobal() instead. 
  * 
- * This routine returns the current mouse location in cockpit pixels.  The 
- * bottom left corner of the display is 0,0.  Pass NULL to not receive info 
- * about either parameter. 
+ * This routine returns the current mouse location in pixels relative to the 
+ * main X-Plane window. The bottom left corner of the main window is (0, 0).  
+ * Pass NULL to not receive info about either parameter. 
  * 
  * Because this function gives the mouse position relative to the main X-Plane 
  * window (rather than in global bounds), this function should only be used by 
@@ -840,11 +859,12 @@ XPLM_API void                 XPLMGetMouseLocation(
  * XPLMGetMouseLocationGlobal
  * 
  * Returns the current mouse location in global desktop boxels. Unlike 
- * XPLMGetMouseLocation(), the bottom left of the display is not guaranteed to 
- * be 0,0---instead, the origin is the lower left of the entire global desktop 
- * space. In addition, this routine gives the real mouse location when the 
- * mouse goes to X-Plane windows other than the primary display. Thus, it can 
- * be used with both pop-out windows and secondary monitors. 
+ * XPLMGetMouseLocation(), the bottom left of the main X-Plane window is not 
+ * guaranteed to be (0, 0)---instead, the origin is the lower left of the 
+ * entire global desktop space. In addition, this routine gives the real mouse 
+ * location when the mouse goes to X-Plane windows other than the primary 
+ * display. Thus, it can be used with both pop-out windows and secondary 
+ * monitors. 
  * 
  * This is the mouse location function to use with modern windows (i.e., those 
  * created by XPLMCreateWindowEx()). 
@@ -865,7 +885,8 @@ XPLM_API void                 XPLMGetMouseLocationGlobal(
  * 
  * If this is a legacy window (one compiled against a pre-XPLM300 version of 
  * the SDK, or an XPLM300 window that was not created using 
- * XPLMCreateWindowEx()), the units are cockpit pixels. 
+ * XPLMCreateWindowEx()), the units are pixels relative to the main X-Plane 
+ * display. 
  * 
  * If, on the other hand, this is a new X-Plane 11-style window (compiled 
  * against the XPLM300 SDK and created using XPLMCreateWindowEx()), the units 
@@ -887,8 +908,8 @@ XPLM_API void                 XPLMGetWindowGeometry(
  * This routine allows you to set the position and size of a window. 
  * 
  * The units and coordinate system match those of XPLMGetWindowGeometry(). 
- * That is, modern windows use global desktop coordinates, while legacy 
- * windows use cockpit pixels. 
+ * That is, modern windows use global desktop boxel coordinates, while legacy 
+ * windows use pixels relative to the main X-Plane display. 
  * 
  * Note that this only applies to "floating" windows (that is, windows that 
  * are drawn within the X-Plane simulation windows, rather than being "popped 
@@ -928,10 +949,11 @@ XPLM_API void                 XPLMGetWindowGeometryOS(
  * This routine allows you to set the position and size, in operating system 
  * pixel coordinates, of a popped out window (that is, a window whose 
  * positioning mode is xplm_WindowPopOut, which exists outside the X-Plane 
- * simulation window, in its own first-class operating system window). Note 
- * that you are responsible for ensuring both that your window is popped out 
- * (using XPLMWindowIsPoppedOut()) and that a monitor really exists at the OS 
- * coordinates you provide (using XPLMGetAllMonitorBoundsOS()).                
+ * simulation window, in its own first-class operating system window). 
+ * 
+ * Note that you are responsible for ensuring both that your window is popped 
+ * out (using XPLMWindowIsPoppedOut()) and that a monitor really exists at the 
+ * OS coordinates you provide (using XPLMGetAllMonitorBoundsOS()).             
  *
  */
 XPLM_API void                 XPLMSetWindowGeometryOS(
@@ -941,6 +963,38 @@ XPLM_API void                 XPLMSetWindowGeometryOS(
                                    int                  inRight,    
                                    int                  inBottom);    
 #endif /* XPLM300 */
+
+#if defined(XPLM301)
+/*
+ * XPLMGetWindowGeometryVR
+ * 
+ * Returns the width and height, in boxels, of a window in VR. Note that you 
+ * are responsible for ensuring your window is in VR (using 
+ * XPLMWindowIsInVR()).                                                        
+ *
+ */
+XPLM_API void                 XPLMGetWindowGeometryVR(
+                                   XPLMWindowID         inWindowID,    
+                                   int *                outWidthBoxels,    /* Can be NULL */
+                                   int *                outHeightBoxels);    /* Can be NULL */
+#endif /* XPLM301 */
+
+#if defined(XPLM301)
+/*
+ * XPLMSetWindowGeometryVR
+ * 
+ * This routine allows you to set the size, in boxels, of a window in VR (that 
+ * is, a window whose positioning mode is xplm_WindowVR). 
+ * 
+ * Note that you are responsible for ensuring your window is in VR (using 
+ * XPLMWindowIsInVR()).                                                        
+ *
+ */
+XPLM_API void                 XPLMSetWindowGeometryVR(
+                                   XPLMWindowID         inWindowID,    
+                                   int                  widthBoxels,    
+                                   int                  heightBoxels);    
+#endif /* XPLM301 */
 
 /*
  * XPLMGetWindowIsVisible
@@ -967,12 +1021,33 @@ XPLM_API void                 XPLMSetWindowIsVisible(
  * 
  * True if this window has been popped out (making it a first-class window in 
  * the operating system), which in turn is true if and only if you have set 
- * the window's positioning mode to xplm_WindowPopOut.                         
+ * the window's positioning mode to xplm_WindowPopOut. 
+ * 
+ * Only applies to modern windows. (Windows created using the deprecated 
+ * XPLMCreateWindow(), or windows compiled against a pre-XPLM300 version of 
+ * the SDK cannot be popped out.)                                              
  *
  */
 XPLM_API int                  XPLMWindowIsPoppedOut(
                                    XPLMWindowID         inWindowID);    
 #endif /* XPLM300 */
+
+#if defined(XPLM301)
+/*
+ * XPLMWindowIsInVR
+ * 
+ * True if this window has been moved to the virtual reality (VR) headset, 
+ * which in turn is true if and only if you have set the window's positioning 
+ * mode to xplm_WindowVR. 
+ * 
+ * Only applies to modern windows. (Windows created using the deprecated 
+ * XPLMCreateWindow(), or windows compiled against a pre-XPLM301 version of 
+ * the SDK cannot be moved to VR.)                                             
+ *
+ */
+XPLM_API int                  XPLMWindowIsInVR(
+                                   XPLMWindowID         inWindowID);    
+#endif /* XPLM301 */
 
 #if defined(XPLM300)
 /*
@@ -993,9 +1068,9 @@ XPLM_API int                  XPLMWindowIsPoppedOut(
  * their positioning relative to their respective edges of the screen, the 
  * whole width of your window would change with the X-Plane window. 
  * 
- * Note that this only applies to modern windows. (Windows created using the 
- * deprecated XPLMCreateWindow(), or windows compiled against a pre-XPLM300 
- * version of the SDK will simply get the default gravity.)                    
+ * Only applies to modern windows. (Windows created using the deprecated 
+ * XPLMCreateWindow(), or windows compiled against a pre-XPLM300 version of 
+ * the SDK will simply get the default gravity.)                               
  *
  */
 XPLM_API void                 XPLMSetWindowGravity(
@@ -1064,6 +1139,11 @@ enum {
       * X-Plane window(s)                                                           */
     ,xplm_WindowPopOut                        = 4
 
+#if defined(XPLM301)
+     /* A floating window visible on the VR headset                                 */
+    ,xplm_WindowVR                            = 5
+
+#endif /* XPLM301 */
 
 };
 typedef int XPLMWindowPositioningMode;
@@ -1098,7 +1178,8 @@ XPLM_API void                 XPLMSetWindowPositioningMode(
  * XPLMSetWindowTitle
  * 
  * Sets the name for a window. This only applies to windows that opted-in to 
- * styling as an X-Plane 11 floating window when they were created using 
+ * styling as an X-Plane 11 floating window (i.e., with styling mode 
+ * xplm_WindowDecorationRoundRectangle) when they were created using 
  * XPLMCreateWindowEx().                                                       
  *
  */
@@ -1132,19 +1213,32 @@ XPLM_API void                 XPLMSetWindowRefCon(
  * XPLMTakeKeyboardFocus
  * 
  * This routine gives a specific window keyboard focus.  Keystrokes will be 
- * sent to  that window.  Pass a window ID of 0 to pass keyboard strokes 
- * directly to X-Plane.                                                        
+ * sent to  that window.  Pass a window ID of 0 to remove keyboard focus from 
+ * any plugin-created windows and instead pass keyboard strokes directly to 
+ * X-Plane.                                                                    
  *
  */
 XPLM_API void                 XPLMTakeKeyboardFocus(
                                    XPLMWindowID         inWindow);    
 
 /*
+ * XPLMHasKeyboardFocus
+ * 
+ * Returns true (1) if the indicated window has keyboard focus. Pass a window 
+ * ID of 0 to see if no plugin window has focus, and all keystrokes will go 
+ * directly to X-Plane.                                                        
+ *
+ */
+XPLM_API int                  XPLMHasKeyboardFocus(
+                                   XPLMWindowID         inWindow);    
+
+/*
  * XPLMBringWindowToFront
  * 
- * This routine brings the window to the front of the Z-order.  Windows are 
- * brought to the front when they are created. Beyond that, you should make 
- * sure you are front before handling mouse clicks. 
+ * This routine brings the window to the front of the Z-order for its layer.  
+ * Windows are brought to the front automatically when they are created. 
+ * Beyond that, you should make sure you are front before handling mouse 
+ * clicks. 
  * 
  * Note that this only brings your window to the front of its layer 
  * (XPLMWindowLayer). Thus, if you have a window in the floating window layer 
@@ -1175,10 +1269,80 @@ XPLM_API int                  XPLMIsWindowInFront(
                                    XPLMWindowID         inWindow);    
 
 /***************************************************************************
+ * KEY SNIFFERS
+ ***************************************************************************/
+/*
+ * Low-level keyboard handlers. Allows for intercepting keystrokes outside the 
+ * normal rules of the user interface.                                         
+ *
+ */
+
+
+/*
+ * XPLMKeySniffer_f
+ * 
+ * This is the prototype for a low level key-sniffing function.  Window-based 
+ * UI _should not use this_!  The windowing system provides high-level 
+ * mediated keyboard access, via the callbacks you attach to your 
+ * XPLMCreateWindow_t. By comparison, the key sniffer provides low level 
+ * keyboard access. 
+ * 
+ * Key sniffers are provided to allow libraries to provide non-windowed user 
+ * interaction.  For example, the MUI library uses a key sniffer to do pop-up 
+ * text entry. 
+ * 
+ * Return 1 to pass the key on to the next sniffer, the window manager, 
+ * X-Plane, or whomever is down stream.  Return 0 to consume the key. 
+ * 
+ * Warning: this API declares virtual keys as a signed character; however the 
+ * VKEY #define macros in XPLMDefs.h define the vkeys using unsigned values 
+ * (that is 0x80 instead of -0x80).  So you may need to cast the incoming vkey 
+ * to an unsigned char to get correct comparisons in C.                        
+ *
+ */
+typedef int (* XPLMKeySniffer_f)(
+                                   char                 inChar,    
+                                   XPLMKeyFlags         inFlags,    
+                                   char                 inVirtualKey,    
+                                   void *               inRefcon);    
+
+/*
+ * XPLMRegisterKeySniffer
+ * 
+ * This routine registers a key sniffing callback.  You specify whether you 
+ * want to sniff before the window system, or only sniff keys the window 
+ * system does not consume.  You should ALMOST ALWAYS sniff non-control keys 
+ * after the window system.  When the window system consumes a key, it is 
+ * because the user has "focused" a window.  Consuming the key or taking 
+ * action based on the key will produce very weird results.  Returns 1 if 
+ * successful.                                                                 
+ *
+ */
+XPLM_API int                  XPLMRegisterKeySniffer(
+                                   XPLMKeySniffer_f     inCallback,    
+                                   int                  inBeforeWindows,    
+                                   void *               inRefcon);    
+
+/*
+ * XPLMUnregisterKeySniffer
+ * 
+ * This routine unregisters a key sniffer.  You must unregister a key sniffer 
+ * for every time you register one with the exact same signature.  Returns 1 
+ * if successful.                                                              
+ *
+ */
+XPLM_API int                  XPLMUnregisterKeySniffer(
+                                   XPLMKeySniffer_f     inCallback,    
+                                   int                  inBeforeWindows,    
+                                   void *               inRefcon);    
+
+/***************************************************************************
  * HOT KEYS
  ***************************************************************************/
 /*
- * Hot Keys - keystrokes that can be managed by others.                        
+ * Keystrokes that can be managed by others. These are lower-level than window 
+ * keyboard handlers (i.e., callbacks you attach to your XPLMCreateWindow_t), 
+ * but higher level than key sniffers.                                         
  *
  */
 
@@ -1195,7 +1359,7 @@ typedef void (* XPLMHotKey_f)(
 /*
  * XPLMHotKeyID
  * 
- * Hot keys are identified by opaque IDs.                                      
+ * An opaque IDs used to identify a hot key.                                   
  *
  */
 typedef void * XPLMHotKeyID;
@@ -1221,7 +1385,7 @@ XPLM_API XPLMHotKeyID         XPLMRegisterHotKey(
 /*
  * XPLMUnregisterHotKey
  * 
- * This API unregisters a hot key.  You can only register your own hot keys.   
+ * This API unregisters a hot key.  You can only unregister your own hot keys. 
  *
  */
 XPLM_API void                 XPLMUnregisterHotKey(
