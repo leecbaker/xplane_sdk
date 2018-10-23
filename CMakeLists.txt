@@ -78,6 +78,9 @@ FUNCTION(add_xplane_plugin library_name library_version ...)
     ENDIF()
     add_xplane_sdk_definitions(${library_name} ${library_version})
 
+    SET_TARGET_PROPERTIES(${library_name} PROPERTIES PREFIX "")
+    SET_TARGET_PROPERTIES(${library_name} PROPERTIES SUFFIX "")
+
     #link flags
     IF(APPLE)
         SET_PROPERTY(TARGET ${library_name} APPEND_STRING PROPERTY LINK_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fPIC -fvisibility=hidden -bundle")
