@@ -41,7 +41,7 @@ FUNCTION(add_xplane_sdk_definitions library_name library_version)
     ELSEIF(UNIX)
         TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=0 -DIBM=0 -DLIN=1)
     ELSEIF(WIN32)
-        TARGET_COMPILE_OPTIONS(${library_name} PRIVATE "/MD$<$<CONFIG:Debug>:d>")
+        TARGET_COMPILE_OPTIONS(${library_name} PRIVATE "/MT$<$<CONFIG:Debug>:d>")
         TARGET_COMPILE_DEFINITIONS(${library_name} PUBLIC -DAPL=0 -DIBM=1 -DLIN=0)
     ENDIF()
 
